@@ -1,7 +1,14 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
-const db = new Database(path.join(__dirname, 'calapp.db'));
+const baseDir = process.env.DATA_DIR || (process.env.VERCEL ? os.tmpdir() : __dirname);
+if (!fs.existsSync(baseDir)) {
+  fs.mkdirSync(baseDir, { recursive: true });
+}
+const dbPath = path.join(baseDir, 'calapp.db');
+const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

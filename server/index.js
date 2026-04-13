@@ -1,9 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
+const fs = require('fs');
 
 // 食品マスタ初期データ投入
 require('./seed');
@@ -13,22 +13,10 @@ const PORT = 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 画像アップロード設定
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, 'uploads'),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-  }
-});
+const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
-
-// uploadsディレクトリ作成
-const fs = require('fs');
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 // ========== API ==========
 
@@ -39,7 +27,8 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: '画像が必要です' });
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const imageUrl = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
     let foods = [];
 
     // OpenAI Vision APIが設定されている場合
@@ -48,9 +37,7 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
         const OpenAI = require('openai');
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-        const imageBuffer = fs.readFileSync(req.file.path);
-        const base64Image = imageBuffer.toString('base64');
-        const mimeType = req.file.mimetype || 'image/jpeg';
+        const base64Image = req.file.buffer.toString('base64');
 
         const response = await openai.chat.completions.create({
           model: 'gpt-4o',
@@ -193,6 +180,14 @@ app.put('/api/meals/:id', (req, res) => {
   res.json({ message: '更新しました' });
 });
 
-app.listen(PORT, () => {
-  console.log(`CalApp server running on http://localhost:${PORT}`);
+app.get('/health', (req, res) => {
+  res.json({ ok: true });
 });
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`CalApp server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
